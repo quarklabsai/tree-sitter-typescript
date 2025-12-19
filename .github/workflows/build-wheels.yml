@@ -1,0 +1,101 @@
+# GitHub Actions workflow for tree-sitter language grammars
+# (tree-sitter-c, tree-sitter-java, tree-sitter-javascript, tree-sitter-python, tree-sitter-typescript)
+#
+# Copy this file to .github/workflows/build-wheels.yml in each forked repo
+
+name: Build and Release Wheels
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag for release (e.g., v0.24.1)'
+        required: false
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-2022]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14-dev'
+          allow-prereleases: true
+
+      - name: Install cibuildwheel
+        run: pip install cibuildwheel==2.21.3
+
+      - name: Build wheels
+        run: cibuildwheel --output-dir wheelhouse
+        env:
+          # Build for Python 3.14 free-threaded
+          CIBW_BUILD: "cp314t-* cp314-* cp313-* cp312-* cp311-* cp310-*"
+          CIBW_SKIP: "*-musllinux_* *-manylinux_i686 *-win32"
+          CIBW_ARCHS_LINUX: "x86_64 aarch64"
+          CIBW_ARCHS_MACOS: "arm64 x86_64"
+          CIBW_ARCHS_WINDOWS: "AMD64"
+          # Enable free-threading support
+          CIBW_FREE_THREADED_SUPPORT: "1"
+          # Build frontend
+          CIBW_BUILD_FRONTEND: "build"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build sdist
+        run: pipx run build --sdist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  release:
+    name: Create GitHub Release
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
