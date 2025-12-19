@@ -49,6 +49,11 @@ jobs:
           CIBW_ARCHS_WINDOWS: "AMD64"
           # Enable free-threading support
           CIBW_FREE_THREADED_SUPPORT: "1"
+          # Enable prerelease Python versions (3.14 is still in development)
+          CIBW_PRERELEASE_PYTHONS: "1"
+          # Use manylinux_2_28 for newer glibc (required for some C extensions)
+          CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
+          CIBW_MANYLINUX_AARCH64_IMAGE: "manylinux_2_28"
           # Build frontend
           CIBW_BUILD_FRONTEND: "build"
 
